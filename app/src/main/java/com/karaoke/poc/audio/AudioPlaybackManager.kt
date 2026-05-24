@@ -84,6 +84,10 @@ class AudioPlaybackManager(val context: Context) {
         }
     }
 
+    fun getCurrentPosition(): Long {
+        return exoPlayer?.currentPosition ?: 0L
+    }
+
     fun release() {
         runOnMainThread {
             exoPlayer?.release()

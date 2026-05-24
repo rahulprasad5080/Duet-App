@@ -6,6 +6,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.karaoke.poc.audio.AudioPlaybackManager
+import com.karaoke.poc.lyrics.LyricLine
 import com.karaoke.poc.lyrics.LyricsParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +30,9 @@ class StudioViewModel : ViewModel() {
     private val _lyricsCount = MutableLiveData<Int>()
     val lyricsCount: LiveData<Int> = _lyricsCount
 
+    private val _lyricLines = MutableLiveData<List<LyricLine>>()
+    val lyricLines: LiveData<List<LyricLine>> = _lyricLines
+
     var audioPlaybackManager: AudioPlaybackManager? = null
         private set
 
@@ -50,11 +54,13 @@ class StudioViewModel : ViewModel() {
         android.util.Log.d("LYRICS", "loadLyrics: called with path: $lyricsFilePath")
         viewModelScope.launch {
             var count = 0
+            var list: List<LyricLine> = emptyList()
             val text = withContext(Dispatchers.IO) {
                 try {
                     val parser = LyricsParser()
                     val lines = parser.parse(context, lyricsFilePath)
                     count = lines.size
+                    list = lines
                     android.util.Log.d("LYRICS", "loadLyrics: parse complete. items=$count")
                     if (lines.isNotEmpty()) {
                         lines.joinToString(separator = "\n") { it.text }
@@ -67,6 +73,7 @@ class StudioViewModel : ViewModel() {
                 }
             }
             android.util.Log.d("LYRICS", "loadLyrics: posting lyricsCount=$count, textLength=${text.length}")
+            _lyricLines.postValue(list)
             _lyricsCount.postValue(count)
             _lyricsText.postValue(text)
         }

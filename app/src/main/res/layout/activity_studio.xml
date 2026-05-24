@@ -24,23 +24,29 @@
         android:background="@drawable/lyrics_top_shadow"
         app:layout_constraintTop_toTopOf="parent"/>
 
-    <!-- Lyrics TextView -->
-    <TextView
-        android:id="@+id/tvLyrics"
+    <!-- Lyrics ScrollView Container -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/svLyrics"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="180dp"
         android:layout_margin="24dp"
         android:background="@drawable/lyrics_bg"
-        android:gravity="center"
-        android:padding="20dp"
-        android:text="Lyrics will appear here"
-        android:textColor="@color/white"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:lineSpacingMultiplier="1.2"
+        android:scrollbars="none"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvLyrics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="20dp"
+            android:textColor="#80FFFFFF"
+            android:textSize="18sp"
+            android:lineSpacingMultiplier="1.3"
+            android:text="Lyrics will appear here" />
+    </androidx.core.widget.NestedScrollView>
 
     <!-- Record/Stop Overlay -->
     <FrameLayout

@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import com.karaoke.poc.audio.AudioPlaybackListener
+import com.karaoke.poc.lyrics.LyricLine
 import com.karaoke.poc.camera.CameraRecorder
 import com.karaoke.poc.camera.CameraRecorderListener
 import com.karaoke.poc.databinding.ActivityStudioBinding
@@ -30,6 +31,10 @@ class StudioActivity : AppCompatActivity() {
     private lateinit var cameraRecorder: CameraRecorder
     private lateinit var backingAudioFile: File
     private lateinit var recordedVideoFile: File
+
+    private val spanInfos = mutableListOf<LyricSpanInfo>()
+    private var fullLyricsText: String = ""
+    private var lyricsJob: kotlinx.coroutines.Job? = null
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.CAMERA,
@@ -78,18 +83,33 @@ class StudioActivity : AppCompatActivity() {
     private fun setupObservers() {
         viewModel.lyricsText.observe(this) { text ->
             android.util.Log.d("LYRICS", "Observed lyricsText: length=${text?.length ?: 0}, preview=${text?.take(30)?.replace("\n", " ") ?: "null"}")
-            binding.tvLyrics.text = text
+            if (spanInfos.isEmpty()) {
+                binding.tvLyrics.text = text
+            }
+        }
+
+        viewModel.lyricLines.observe(this) { lines ->
+            spanInfos.clear()
+            var currentOffset = 0
+            val sb = java.lang.StringBuilder()
+            for (i in lines.indices) {
+                val text = lines[i].text
+                sb.append(text)
+                if (i < lines.size - 1) {
+                    sb.append("\n")
+                }
+                val start = currentOffset
+                val end = currentOffset + text.length
+                spanInfos.add(LyricSpanInfo(i, start, end, lines[i]))
+                currentOffset += text.length + 1
+            }
+            fullLyricsText = sb.toString()
+            updateLyricsHighlight(0L)
         }
 
         viewModel.lyricsCount.observe(this) { count ->
             android.util.Log.d("LYRICS", "Observed lyricsCount: $count")
             Toast.makeText(this, "Loaded lyrics count: $count", Toast.LENGTH_LONG).show()
-            if (count > 0 && (binding.tvLyrics.text.toString().trim() == "Ready to record" || binding.tvLyrics.text.isEmpty())) {
-                android.util.Log.d("LYRICS", "Forcing render of lyrics text in UI")
-                viewModel.lyricsText.value?.let { text ->
-                    binding.tvLyrics.text = text
-                }
-            }
         }
 
         viewModel.recordingState.observe(this) { state ->
@@ -99,12 +119,14 @@ class StudioActivity : AppCompatActivity() {
                     binding.btnStop.visibility = View.GONE
                     binding.btnRecord.isEnabled = true
                     binding.btnStop.isEnabled = true
+                    stopLyricsScrolling()
                 }
                 RecordingState.RECORDING -> {
                     binding.btnRecord.visibility = View.GONE
                     binding.btnStop.visibility = View.VISIBLE
                     binding.btnRecord.isEnabled = true
                     binding.btnStop.isEnabled = true
+                    startLyricsScrolling()
                 }
                 RecordingState.STOPPING -> {
                     binding.btnRecord.visibility = View.GONE
@@ -237,8 +259,70 @@ class StudioActivity : AppCompatActivity() {
         }
     }
 
+    private fun startLyricsScrolling() {
+        lyricsJob?.cancel()
+        lyricsJob = lifecycleScope.launch {
+            while (viewModel.recordingState.value == RecordingState.RECORDING) {
+                val currentPosMs = viewModel.audioPlaybackManager?.getCurrentPosition() ?: 0L
+                updateLyricsHighlight(currentPosMs)
+                kotlinx.coroutines.delay(50)
+            }
+        }
+    }
+
+    private fun stopLyricsScrolling() {
+        lyricsJob?.cancel()
+        lyricsJob = null
+    }
+
+    private fun updateLyricsHighlight(currentPosMs: Long) {
+        if (spanInfos.isEmpty()) return
+
+        val activeInfo = spanInfos.firstOrNull { currentPosMs >= it.lyricLine.startTimeMs && currentPosMs <= it.lyricLine.endTimeMs }
+            ?: spanInfos.firstOrNull { currentPosMs < it.lyricLine.startTimeMs }
+            ?: spanInfos.lastOrNull()
+            ?: return
+
+        val activeLineIndex = activeInfo.lineIndex
+
+        val spannable = android.text.SpannableString(fullLyricsText)
+        spannable.setSpan(
+            android.text.style.ForegroundColorSpan(android.graphics.Color.parseColor("#FFEB3B")),
+            activeInfo.startChar,
+            activeInfo.endChar,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        spannable.setSpan(
+            android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+            activeInfo.startChar,
+            activeInfo.endChar,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        spannable.setSpan(
+            android.text.style.RelativeSizeSpan(1.15f),
+            activeInfo.startChar,
+            activeInfo.endChar,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        binding.tvLyrics.text = spannable
+
+        binding.tvLyrics.post {
+            val layout = binding.tvLyrics.layout
+            if (layout != null && activeLineIndex >= 0 && activeLineIndex < layout.lineCount) {
+                val lineTop = layout.getLineTop(activeLineIndex)
+                val lineBottom = layout.getLineBottom(activeLineIndex)
+                val lineCenter = (lineTop + lineBottom) / 2
+                val scrollViewHeight = binding.svLyrics.height
+                val scrollY = lineCenter - scrollViewHeight / 2
+                binding.svLyrics.smoothScrollTo(0, Math.max(0, scrollY))
+            }
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        stopLyricsScrolling()
         // Stop session if app goes to background
         if (viewModel.recordingState.value == RecordingState.RECORDING) {
             stopRecordingSession()
@@ -247,6 +331,14 @@ class StudioActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopLyricsScrolling()
         viewModel.releaseManagers()
     }
 }
+
+private data class LyricSpanInfo(
+    val lineIndex: Int,
+    val startChar: Int,
+    val endChar: Int,
+    val lyricLine: com.karaoke.poc.lyrics.LyricLine
+)
