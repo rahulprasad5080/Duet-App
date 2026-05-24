@@ -20,7 +20,7 @@
     <!-- Dark gradient overlay for lyrics legibility -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="280dp"
         android:background="@drawable/lyrics_top_shadow"
         app:layout_constraintTop_toTopOf="parent"/>
 
@@ -28,7 +28,7 @@
     <androidx.core.widget.NestedScrollView
         android:id="@+id/svLyrics"
         android:layout_width="0dp"
-        android:layout_height="180dp"
+        android:layout_height="280dp"
         android:layout_margin="24dp"
         android:background="@drawable/lyrics_bg"
         android:scrollbars="none"
