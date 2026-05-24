@@ -6,8 +6,8 @@ import java.io.File
 class OutputComposer {
 
     fun copyAssetsToFilesDir(context: Context) {
-        copyAssetIfNeeded(context, "metronome.mp3")
-        copyAssetIfNeeded(context, "metronome.rzlrc")
+        copyAssetIfNeeded(context, "ekkada.mp3")
+        copyAssetIfNeeded(context, "ekkada.rzlrc")
     }
 
     private fun copyAssetIfNeeded(context: Context, filename: String) {
@@ -26,11 +26,11 @@ class OutputComposer {
     }
 
     fun getBackingAudioFile(context: Context): File {
-        return File(context.filesDir, "metronome.mp3")
+        return File(context.filesDir, "ekkada.mp3")
     }
 
     fun getBackingLyricsFile(context: Context): File {
-        return File(context.filesDir, "metronome.rzlrc")
+        return File(context.filesDir, "ekkada.rzlrc")
     }
 
     fun getRecordedVideoFile(context: Context): File {
