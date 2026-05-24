@@ -2,7 +2,7 @@ package com.karaoke.poc.sync
 
 import java.io.File
 
-class SyncEngine {
+object SyncEngine {
     var audioPlayStartTimeMs: Long = 0L
     var videoRecordStartTimeMs: Long = 0L
     var recordingDurationMs: Long = 0L

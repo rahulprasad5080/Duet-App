@@ -1,17 +1,33 @@
 package com.karaoke.poc.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.View
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.karaoke.poc.audio.AudioPlaybackListener
+import com.karaoke.poc.camera.CameraRecorder
+import com.karaoke.poc.camera.CameraRecorderListener
 import com.karaoke.poc.databinding.ActivityStudioBinding
+import com.karaoke.poc.mixer.OutputComposer
+import com.karaoke.poc.sync.SyncEngine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class StudioActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityStudioBinding
+    private val viewModel: StudioViewModel by viewModels()
+    private lateinit var cameraRecorder: CameraRecorder
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.CAMERA,
@@ -25,11 +41,159 @@ class StudioActivity : AppCompatActivity() {
         binding = ActivityStudioBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        if (allPermissionsGranted()) {
-            Toast.makeText(this, "Permissions already granted", Toast.LENGTH_SHORT).show()
-        } else {
-            ActivityCompat.requestPermissions(this, requiredPermissions, permissionRequestCode)
+        // Set up observers first
+        setupObservers()
+
+        // Bootstrap: Copy assets to filesDir asynchronously
+        lifecycleScope.launch(Dispatchers.IO) {
+            OutputComposer().copyAssetsToFilesDir(this@StudioActivity)
+            withContext(Dispatchers.Main) {
+                initManagers()
+                
+                if (allPermissionsGranted()) {
+                    onPermissionsReady()
+                } else {
+                    ActivityCompat.requestPermissions(
+                        this@StudioActivity,
+                        requiredPermissions,
+                        permissionRequestCode
+                    )
+                }
+            }
         }
+
+        binding.btnRecord.setOnClickListener {
+            startRecordingSession()
+        }
+
+        binding.btnStop.setOnClickListener {
+            stopRecordingSession()
+        }
+    }
+
+    private fun setupObservers() {
+        viewModel.lyricsText.observe(this) { text ->
+            binding.tvLyrics.text = text
+        }
+
+        viewModel.recordingState.observe(this) { state ->
+            when (state) {
+                RecordingState.IDLE -> {
+                    binding.btnRecord.visibility = View.VISIBLE
+                    binding.btnStop.visibility = View.GONE
+                    binding.btnRecord.isEnabled = true
+                    binding.btnStop.isEnabled = true
+                }
+                RecordingState.RECORDING -> {
+                    binding.btnRecord.visibility = View.GONE
+                    binding.btnStop.visibility = View.VISIBLE
+                    binding.btnRecord.isEnabled = true
+                    binding.btnStop.isEnabled = true
+                }
+                RecordingState.STOPPING -> {
+                    binding.btnRecord.visibility = View.GONE
+                    binding.btnStop.visibility = View.VISIBLE
+                    binding.btnRecord.isEnabled = false
+                    binding.btnStop.isEnabled = false
+                }
+                RecordingState.ERROR -> {
+                    binding.btnRecord.visibility = View.VISIBLE
+                    binding.btnStop.visibility = View.GONE
+                    binding.btnRecord.isEnabled = true
+                    binding.btnStop.isEnabled = true
+                    viewModel.setRecordingState(RecordingState.IDLE)
+                }
+            }
+        }
+    }
+
+    private fun initManagers() {
+        cameraRecorder = CameraRecorder(this)
+        viewModel.initAudioPlaybackManager(this)
+    }
+
+    private fun onPermissionsReady() {
+        // Start front camera preview
+        cameraRecorder.setUpCamera(this, binding.previewView)
+
+        // Load lyrics file contents
+        val lyricsFile = OutputComposer().getBackingLyricsFile(this)
+        viewModel.loadLyrics(this, lyricsFile.absolutePath)
+
+        // Pre-prepare backing audio
+        val audioFile = OutputComposer().getBackingAudioFile(this)
+        viewModel.prepareAudio(audioFile.absolutePath)
+    }
+
+    private fun startRecordingSession() {
+        if (!allPermissionsGranted()) {
+            ActivityCompat.requestPermissions(this, requiredPermissions, permissionRequestCode)
+            return
+        }
+
+        // Reset sync engine parameters
+        SyncEngine.reset()
+
+        val backingAudio = OutputComposer().getBackingAudioFile(this)
+        val recordedVideo = OutputComposer().getRecordedVideoFile(this)
+        
+        SyncEngine.backingAudioFile = backingAudio
+        SyncEngine.recordedVideoFile = recordedVideo
+
+        // Re-setup preview view if needed
+        cameraRecorder.setUpCamera(this, binding.previewView)
+
+        // Start playback and recording in parallel
+        viewModel.audioPlaybackManager?.start(object : AudioPlaybackListener {
+            override fun onPlaybackStarted(timestampMs: Long) {
+                SyncEngine.audioPlayStartTimeMs = timestampMs
+            }
+
+            override fun onPlaybackEnded() {
+                // Playback finished naturally
+            }
+        })
+
+        cameraRecorder.startRecording(recordedVideo, object : CameraRecorderListener {
+            override fun onRecordingStarted(timestampMs: Long) {
+                SyncEngine.videoRecordStartTimeMs = timestampMs
+                viewModel.setRecordingState(RecordingState.RECORDING)
+            }
+
+            override fun onRecordingStopped(outputFile: File) {
+                // Stopped callback
+                val duration = SystemClock.elapsedRealtime() - SyncEngine.videoRecordStartTimeMs
+                SyncEngine.recordingDurationMs = duration
+
+                // Navigate to MixerActivity, keeping StudioActivity in the back stack
+                val intent = Intent(this@StudioActivity, MixerActivity::class.java).apply {
+                    putExtra("EXTRA_VIDEO_PATH", outputFile.absolutePath)
+                    putExtra("EXTRA_AUDIO_PATH", OutputComposer().getBackingAudioFile(this@StudioActivity).absolutePath)
+                    putExtra("EXTRA_OFFSET_MS", SyncEngine.getOffsetMs())
+                    putExtra("EXTRA_DURATION_MS", SyncEngine.recordingDurationMs)
+                }
+                startActivity(intent)
+
+                // Return UI to IDLE state
+                viewModel.setRecordingState(RecordingState.IDLE)
+            }
+
+            override fun onRecordingError(exception: Exception) {
+                exception.printStackTrace()
+                runOnUiThread {
+                    Toast.makeText(this@StudioActivity, "Recording Error: ${exception.message}", Toast.LENGTH_LONG).show()
+                }
+                viewModel.setRecordingState(RecordingState.ERROR)
+            }
+        })
+    }
+
+    private fun stopRecordingSession() {
+        viewModel.setRecordingState(RecordingState.STOPPING)
+        
+        // Stop audio and video
+        viewModel.audioPlaybackManager?.stop()
+        cameraRecorder.stopRecording()
     }
 
     private fun allPermissionsGranted() = requiredPermissions.all {
@@ -44,10 +208,23 @@ class StudioActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionRequestCode) {
             if (allPermissionsGranted()) {
-                Toast.makeText(this, "Permissions granted by user", Toast.LENGTH_SHORT).show()
+                onPermissionsReady()
             } else {
-                Toast.makeText(this, "Permissions not granted by user", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Camera & Audio permissions are required to use Studio.", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Stop session if app goes to background
+        if (viewModel.recordingState.value == RecordingState.RECORDING) {
+            stopRecordingSession()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        viewModel.releaseManagers()
     }
 }
