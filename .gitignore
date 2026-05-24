@@ -1,0 +1,51 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Local config
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# Keystore
+*.jks
+*.keystore
+
+# Generated files
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# APK / Bundle
+*.apk
+*.aab
+
+# Firebase
+google-services.json
+
+# NDK
+obj/
+
+# FFmpeg temp
+tmp/
+temp/
+
+# Signing
+signing.properties
+
+# Crash files
+hs_err_pid*
+replay_pid*
