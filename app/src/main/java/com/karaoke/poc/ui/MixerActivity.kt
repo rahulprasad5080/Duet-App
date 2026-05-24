@@ -4,9 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 class MixerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMixerBinding
-    private val viewModel: MixerViewModel by viewModels()
+    private lateinit var viewModel: MixerViewModel
 
     private var exoPlayer: ExoPlayer? = null
     private var progressDialog: AlertDialog? = null
@@ -30,6 +30,8 @@ class MixerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMixerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        viewModel = ViewModelProvider(this)[MixerViewModel::class.java]
 
         // Retrieve intent extras
         val videoPath = intent.getStringExtra("EXTRA_VIDEO_PATH") ?: ""

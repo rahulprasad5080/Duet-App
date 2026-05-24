@@ -7,11 +7,11 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import android.widget.Toast
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModelProvider
 import com.karaoke.poc.audio.AudioPlaybackListener
 import com.karaoke.poc.camera.CameraRecorder
 import com.karaoke.poc.camera.CameraRecorderListener
@@ -26,7 +26,7 @@ import java.io.File
 class StudioActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityStudioBinding
-    private val viewModel: StudioViewModel by viewModels()
+    private lateinit var viewModel: StudioViewModel
     private lateinit var cameraRecorder: CameraRecorder
 
     private val requiredPermissions = arrayOf(
@@ -40,6 +40,8 @@ class StudioActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityStudioBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        viewModel = ViewModelProvider(this)[StudioViewModel::class.java]
 
         // Set up observers first
         setupObservers()
@@ -134,14 +136,18 @@ class StudioActivity : AppCompatActivity() {
         // Reset sync engine parameters
         SyncEngine.reset()
 
+        // Fail-safe: Set initial fallback timestamps to prevent offset errors if callbacks are delayed
+        val now = SystemClock.elapsedRealtime()
+        SyncEngine.audioPlayStartTimeMs = now
+        SyncEngine.videoRecordStartTimeMs = now
+
         val backingAudio = OutputComposer().getBackingAudioFile(this)
         val recordedVideo = OutputComposer().getRecordedVideoFile(this)
         
         SyncEngine.backingAudioFile = backingAudio
         SyncEngine.recordedVideoFile = recordedVideo
 
-        // Re-setup preview view if needed
-        cameraRecorder.setUpCamera(this, binding.previewView)
+
 
         // Start playback and recording in parallel
         viewModel.audioPlaybackManager?.start(object : AudioPlaybackListener {
