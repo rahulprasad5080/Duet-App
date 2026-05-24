@@ -109,7 +109,6 @@ class StudioActivity : AppCompatActivity() {
 
         viewModel.lyricsCount.observe(this) { count ->
             android.util.Log.d("LYRICS", "Observed lyricsCount: $count")
-            Toast.makeText(this, "Loaded lyrics count: $count", Toast.LENGTH_LONG).show()
         }
 
         viewModel.recordingState.observe(this) { state ->
