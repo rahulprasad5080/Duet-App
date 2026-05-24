@@ -28,6 +28,8 @@ class StudioActivity : AppCompatActivity() {
     private lateinit var binding: ActivityStudioBinding
     private lateinit var viewModel: StudioViewModel
     private lateinit var cameraRecorder: CameraRecorder
+    private lateinit var backingAudioFile: File
+    private lateinit var recordedVideoFile: File
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.CAMERA,
@@ -130,14 +132,17 @@ class StudioActivity : AppCompatActivity() {
         // Start front camera preview
         cameraRecorder.setUpCamera(this, binding.previewView)
 
+        // Cache files to avoid lazy I/O during recording
+        backingAudioFile = OutputComposer().getBackingAudioFile(this)
+        recordedVideoFile = OutputComposer().getRecordedVideoFile(this)
+
         // Load lyrics file contents
         val lyricsFile = OutputComposer().getBackingLyricsFile(this)
         android.util.Log.d("LYRICS", "onPermissionsReady: lyricsFile=${lyricsFile.absolutePath}, exists=${lyricsFile.exists()}, size=${lyricsFile.length()} bytes")
         viewModel.loadLyrics(this, lyricsFile.absolutePath)
 
         // Pre-prepare backing audio
-        val audioFile = OutputComposer().getBackingAudioFile(this)
-        viewModel.prepareAudio(audioFile.absolutePath)
+        viewModel.prepareAudio(backingAudioFile.absolutePath)
     }
 
     private fun startRecordingSession() {
@@ -149,45 +154,43 @@ class StudioActivity : AppCompatActivity() {
         // Reset sync engine parameters
         SyncEngine.reset()
 
-        // Fail-safe: Set initial fallback timestamps to prevent offset errors if callbacks are delayed
-        val now = SystemClock.elapsedRealtime()
-        SyncEngine.audioPlayStartTimeMs = now
-        SyncEngine.videoRecordStartTimeMs = now
+        SyncEngine.backingAudioFile = backingAudioFile
+        SyncEngine.recordedVideoFile = recordedVideoFile
 
-        val backingAudio = OutputComposer().getBackingAudioFile(this)
-        val recordedVideo = OutputComposer().getRecordedVideoFile(this)
-        
-        SyncEngine.backingAudioFile = backingAudio
-        SyncEngine.recordedVideoFile = recordedVideo
+        // Sequential start: Start video recording first, and start audio playback inside onRecordingStarted
+        cameraRecorder.startRecording(recordedVideoFile, object : CameraRecorderListener {
+            override fun onRecordingStarted(videoTimestampNs: Long) {
+                SyncEngine.videoRecordStartTimeNs = videoTimestampNs
+                android.util.Log.d("SYNC", "videoStartNs=$videoTimestampNs")
 
+                // Immediately start ExoPlayer playback now that the video is recording
+                viewModel.audioPlaybackManager?.start(object : AudioPlaybackListener {
+                    override fun onPlaybackStarted(audioTimestampNs: Long) {
+                        SyncEngine.audioPlayStartTimeNs = audioTimestampNs
+                        val offsetMs = SyncEngine.getOffsetMs()
+                        
+                        android.util.Log.d("SYNC", "audioStartNs=$audioTimestampNs")
+                        android.util.Log.d("SYNC", "offsetMs=$offsetMs")
+                        
+                        // Update UI recording state only after playback starts
+                        viewModel.setRecordingState(RecordingState.RECORDING)
+                    }
 
-
-        // Start playback and recording in parallel
-        viewModel.audioPlaybackManager?.start(object : AudioPlaybackListener {
-            override fun onPlaybackStarted(timestampMs: Long) {
-                SyncEngine.audioPlayStartTimeMs = timestampMs
-            }
-
-            override fun onPlaybackEnded() {
-                // Playback finished naturally
-            }
-        })
-
-        cameraRecorder.startRecording(recordedVideo, object : CameraRecorderListener {
-            override fun onRecordingStarted(timestampMs: Long) {
-                SyncEngine.videoRecordStartTimeMs = timestampMs
-                viewModel.setRecordingState(RecordingState.RECORDING)
+                    override fun onPlaybackEnded() {
+                        // Playback finished naturally
+                    }
+                })
             }
 
             override fun onRecordingStopped(outputFile: File) {
                 // Stopped callback
-                val duration = SystemClock.elapsedRealtime() - SyncEngine.videoRecordStartTimeMs
+                val duration = (SystemClock.elapsedRealtimeNanos() - SyncEngine.videoRecordStartTimeNs) / 1_000_000
                 SyncEngine.recordingDurationMs = duration
 
                 // Navigate to MixerActivity, keeping StudioActivity in the back stack
                 val intent = Intent(this@StudioActivity, MixerActivity::class.java).apply {
                     putExtra("EXTRA_VIDEO_PATH", outputFile.absolutePath)
-                    putExtra("EXTRA_AUDIO_PATH", OutputComposer().getBackingAudioFile(this@StudioActivity).absolutePath)
+                    putExtra("EXTRA_AUDIO_PATH", backingAudioFile.absolutePath)
                     putExtra("EXTRA_OFFSET_MS", SyncEngine.getOffsetMs())
                     putExtra("EXTRA_DURATION_MS", SyncEngine.recordingDurationMs)
                 }

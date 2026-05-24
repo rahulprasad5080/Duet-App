@@ -9,7 +9,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 
 interface AudioPlaybackListener {
-    fun onPlaybackStarted(timestampMs: Long)
+    fun onPlaybackStarted(timestampNs: Long)
     fun onPlaybackEnded()
 }
 
@@ -51,8 +51,8 @@ class AudioPlaybackManager(val context: Context) {
 
         if (state == Player.STATE_READY && isPlaying && !isStartedCallbackTriggered) {
             isStartedCallbackTriggered = true
-            val timestampMs = SystemClock.elapsedRealtime()
-            listener?.onPlaybackStarted(timestampMs)
+            val timestampNs = SystemClock.elapsedRealtimeNanos()
+            listener?.onPlaybackStarted(timestampNs)
         } else if (state == Player.STATE_ENDED) {
             listener?.onPlaybackEnded()
         }

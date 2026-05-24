@@ -3,19 +3,20 @@ package com.karaoke.poc.sync
 import java.io.File
 
 object SyncEngine {
-    var audioPlayStartTimeMs: Long = 0L
-    var videoRecordStartTimeMs: Long = 0L
+    var audioPlayStartTimeNs: Long = 0L
+    var videoRecordStartTimeNs: Long = 0L
     var recordingDurationMs: Long = 0L
     var recordedVideoFile: File? = null
     var backingAudioFile: File? = null
 
     fun getOffsetMs(): Long {
-        return videoRecordStartTimeMs - audioPlayStartTimeMs
+        if (videoRecordStartTimeNs == 0L || audioPlayStartTimeNs == 0L) return 0L
+        return (videoRecordStartTimeNs - audioPlayStartTimeNs) / 1_000_000
     }
 
     fun reset() {
-        audioPlayStartTimeMs = 0L
-        videoRecordStartTimeMs = 0L
+        audioPlayStartTimeNs = 0L
+        videoRecordStartTimeNs = 0L
         recordingDurationMs = 0L
         recordedVideoFile = null
         backingAudioFile = null

@@ -17,7 +17,7 @@ import androidx.lifecycle.LifecycleOwner
 import java.io.File
 
 interface CameraRecorderListener {
-    fun onRecordingStarted(timestampMs: Long)
+    fun onRecordingStarted(timestampNs: Long)
     fun onRecordingStopped(outputFile: File)
     fun onRecordingError(exception: Exception)
 }
@@ -71,8 +71,8 @@ class CameraRecorder(val context: Context) {
                 .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                     when (recordEvent) {
                         is VideoRecordEvent.Start -> {
-                            val timestampMs = SystemClock.elapsedRealtime()
-                            listener.onRecordingStarted(timestampMs)
+                            val timestampNs = SystemClock.elapsedRealtimeNanos()
+                            listener.onRecordingStarted(timestampNs)
                         }
                         is VideoRecordEvent.Finalize -> {
                             if (recordEvent.hasError()) {
