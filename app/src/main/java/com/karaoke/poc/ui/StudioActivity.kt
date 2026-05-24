@@ -75,7 +75,19 @@ class StudioActivity : AppCompatActivity() {
 
     private fun setupObservers() {
         viewModel.lyricsText.observe(this) { text ->
+            android.util.Log.d("LYRICS", "Observed lyricsText: length=${text?.length ?: 0}, preview=${text?.take(30)?.replace("\n", " ") ?: "null"}")
             binding.tvLyrics.text = text
+        }
+
+        viewModel.lyricsCount.observe(this) { count ->
+            android.util.Log.d("LYRICS", "Observed lyricsCount: $count")
+            Toast.makeText(this, "Loaded lyrics count: $count", Toast.LENGTH_LONG).show()
+            if (count > 0 && (binding.tvLyrics.text.toString().trim() == "Ready to record" || binding.tvLyrics.text.isEmpty())) {
+                android.util.Log.d("LYRICS", "Forcing render of lyrics text in UI")
+                viewModel.lyricsText.value?.let { text ->
+                    binding.tvLyrics.text = text
+                }
+            }
         }
 
         viewModel.recordingState.observe(this) { state ->
@@ -120,6 +132,7 @@ class StudioActivity : AppCompatActivity() {
 
         // Load lyrics file contents
         val lyricsFile = OutputComposer().getBackingLyricsFile(this)
+        android.util.Log.d("LYRICS", "onPermissionsReady: lyricsFile=${lyricsFile.absolutePath}, exists=${lyricsFile.exists()}, size=${lyricsFile.length()} bytes")
         viewModel.loadLyrics(this, lyricsFile.absolutePath)
 
         // Pre-prepare backing audio

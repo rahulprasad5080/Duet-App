@@ -26,6 +26,9 @@ class StudioViewModel : ViewModel() {
     private val _lyricsText = MutableLiveData<String>()
     val lyricsText: LiveData<String> = _lyricsText
 
+    private val _lyricsCount = MutableLiveData<Int>()
+    val lyricsCount: LiveData<Int> = _lyricsCount
+
     var audioPlaybackManager: AudioPlaybackManager? = null
         private set
 
@@ -44,21 +47,27 @@ class StudioViewModel : ViewModel() {
     }
 
     fun loadLyrics(context: Context, lyricsFilePath: String) {
+        android.util.Log.d("LYRICS", "loadLyrics: called with path: $lyricsFilePath")
         viewModelScope.launch {
+            var count = 0
             val text = withContext(Dispatchers.IO) {
                 try {
                     val parser = LyricsParser()
                     val lines = parser.parse(context, lyricsFilePath)
+                    count = lines.size
+                    android.util.Log.d("LYRICS", "loadLyrics: parse complete. items=$count")
                     if (lines.isNotEmpty()) {
                         lines.joinToString(separator = "\n") { it.text }
                     } else {
                         "____\nReady to record"
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("LYRICS", "loadLyrics: Exception inside IO coroutine", e)
                     "Error loading lyrics: ${e.localizedMessage}"
                 }
             }
+            android.util.Log.d("LYRICS", "loadLyrics: posting lyricsCount=$count, textLength=${text.length}")
+            _lyricsCount.postValue(count)
             _lyricsText.postValue(text)
         }
     }
