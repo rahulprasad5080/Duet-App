@@ -16,8 +16,8 @@ interface MergeListener {
 class VideoMerger(val context: Context) {
 
     private companion object {
-        const val MIC_VOLUME = 0.75
-        const val BACKING_VOLUME = 2.4
+        const val MIC_VOLUME = 2.0
+        const val BACKING_VOLUME = 0.3
     }
 
     fun merge(
