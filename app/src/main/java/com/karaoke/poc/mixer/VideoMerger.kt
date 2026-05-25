@@ -29,12 +29,11 @@ class VideoMerger(val context: Context) {
         backingVolume: Double,
         listener: MergeListener
     ) {
-        val outputFile = OutputComposer().getMergedOutputFile(context)
+        // Clean old output files first to save storage
+        OutputComposer().cleanOldMergedOutputs(context)
 
-        // Delete any existing output file to avoid issues
-        if (outputFile.exists()) {
-            outputFile.delete()
-        }
+        // Generate unique fresh file path to prevent OS/ExoPlayer file-locking errors
+        val outputFile = OutputComposer().getUniqueMergedOutputFile(context)
 
         val command = buildCommand(
             recordedVideo = recordedVideo,

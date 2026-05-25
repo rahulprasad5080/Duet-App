@@ -40,4 +40,22 @@ class OutputComposer {
     fun getMergedOutputFile(context: Context): File {
         return File(context.filesDir, "final_output.mp4")
     }
+
+    fun getUniqueMergedOutputFile(context: Context): File {
+        return File(context.filesDir, "final_output_${System.currentTimeMillis()}.mp4")
+    }
+
+    fun cleanOldMergedOutputs(context: Context, exceptFile: File? = null) {
+        try {
+            val dir = context.filesDir
+            val files = dir.listFiles { _, name -> name.startsWith("final_output_") || name == "final_output.mp4" }
+            files?.forEach { file ->
+                if (exceptFile == null || file.absolutePath != exceptFile.absolutePath) {
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

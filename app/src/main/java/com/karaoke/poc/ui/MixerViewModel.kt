@@ -35,6 +35,7 @@ class MixerViewModel : ViewModel() {
         micVolume: Double = VideoMerger.DEFAULT_MIC_VOLUME,
         backingVolume: Double = VideoMerger.DEFAULT_BACKING_VOLUME
     ) {
+        _outputVideoPath.postValue(null)
         val recordedVideo = File(recordedVideoPath)
         val backingAudio = File(backingAudioPath)
 
