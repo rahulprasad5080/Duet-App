@@ -55,7 +55,7 @@ class CameraRecorder(val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun startRecording(outputFile: File, listener: CameraRecorderListener) {
+    fun startRecording(outputFile: File, enableAudio: Boolean, listener: CameraRecorderListener) {
         val vc = videoCapture
         if (vc == null) {
             listener.onRecordingError(IllegalStateException("VideoCapture is not initialized. Please call setUpCamera first."))
@@ -66,8 +66,13 @@ class CameraRecorder(val context: Context) {
             val fileOutputOptions = FileOutputOptions.Builder(outputFile).build()
             val recordingBuilder = vc.output.prepareRecording(context, fileOutputOptions)
 
-            currentRecording = recordingBuilder
-                .withAudioEnabled()
+            val pendingRecording = if (enableAudio) {
+                recordingBuilder.withAudioEnabled()
+            } else {
+                recordingBuilder
+            }
+
+            currentRecording = pendingRecording
                 .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                     when (recordEvent) {
                         is VideoRecordEvent.Start -> {

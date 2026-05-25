@@ -1,6 +1,7 @@
 package com.karaoke.poc.audio
 
 import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -61,7 +62,7 @@ class AudioPlaybackManager(val context: Context) {
     fun prepare(filePath: String) {
         runOnMainThread {
             val player = exoPlayer ?: return@runOnMainThread
-            val mediaItem = MediaItem.fromUri(filePath)
+            val mediaItem = MediaItem.fromUri(Uri.fromFile(java.io.File(filePath)))
             player.setMediaItem(mediaItem)
             player.prepare()
         }
@@ -72,6 +73,8 @@ class AudioPlaybackManager(val context: Context) {
             this.listener = listener
             isStartedCallbackTriggered = false
             val player = exoPlayer ?: return@runOnMainThread
+            player.seekTo(0)
+            player.prepare()
             player.playWhenReady = true
             player.play()
         }

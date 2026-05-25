@@ -94,4 +94,17 @@
             app:strokeWidth="6dp"/>
     </FrameLayout>
 
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switchMic"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginBottom="12dp"
+        android:checked="true"
+        android:text="Mic"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@id/recordStopOverlay"
+        app:layout_constraintEnd_toEndOf="@id/recordStopOverlay"
+        app:layout_constraintStart_toStartOf="@id/recordStopOverlay" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

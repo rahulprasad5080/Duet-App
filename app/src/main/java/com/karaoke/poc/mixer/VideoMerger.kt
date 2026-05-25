@@ -1,9 +1,11 @@
 package com.karaoke.poc.mixer
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
+import java.util.Locale
 
 interface MergeListener {
     fun onMergeStarted()
@@ -12,6 +14,11 @@ interface MergeListener {
 }
 
 class VideoMerger(val context: Context) {
+
+    private companion object {
+        const val MIC_VOLUME = 0.75
+        const val BACKING_VOLUME = 2.4
+    }
 
     fun merge(
         recordedVideo: File,
@@ -27,23 +34,108 @@ class VideoMerger(val context: Context) {
             outputFile.delete()
         }
 
-        val command = if (offsetMs >= 0) {
-            "ffmpeg -y -i \"${recordedVideo.absolutePath}\" -ss ${offsetMs / 1000.0} -t ${durationMs / 1000.0} -i \"${backingAudio.absolutePath}\" -filter_complex \"[0:a]volume=1.0[mic];[1:a]volume=1.0[backing];[mic][backing]amix=inputs=2:duration=first[a]\" -map 0:v:0 -map \"[a]\" -c:v copy -c:a aac \"${outputFile.absolutePath}\""
-        } else {
-            "ffmpeg -y -i \"${recordedVideo.absolutePath}\" -i \"${backingAudio.absolutePath}\" -filter_complex \"[1:a]adelay=${-offsetMs}|${-offsetMs}[backing];[0:a]volume=1.0[mic];[mic][backing]amix=inputs=2:duration=first[a]\" -map 0:v:0 -map \"[a]\" -c:v copy -c:a aac \"${outputFile.absolutePath}\""
-        }
+        val command = buildCommand(
+            recordedVideo = recordedVideo,
+            backingAudio = backingAudio,
+            outputFile = outputFile,
+            offsetMs = offsetMs,
+            durationMs = durationMs,
+            recordedVideoHasAudio = hasAudioTrack(recordedVideo)
+        )
 
         listener.onMergeStarted()
 
         FFmpegKit.executeAsync(command) { session ->
             val returnCode = session.returnCode
-            if (ReturnCode.isSuccess(returnCode)) {
+            if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0L) {
                 listener.onMergeSuccess(outputFile)
             } else {
                 val failStackTrace = session.failStackTrace ?: "No stack trace"
-                val errorMessage = "FFmpeg execution failed with return code: $returnCode. Stacktrace: $failStackTrace"
+                val errorMessage = "FFmpeg execution failed with return code: $returnCode. Stacktrace: $failStackTrace. Command: $command"
                 listener.onMergeFailed(errorMessage)
             }
         }
+    }
+
+    private fun buildCommand(
+        recordedVideo: File,
+        backingAudio: File,
+        outputFile: File,
+        offsetMs: Long,
+        durationMs: Long,
+        recordedVideoHasAudio: Boolean
+    ): String {
+        val durationSeconds = formatSeconds(durationMs.coerceAtLeast(1L) / 1000.0)
+        val videoInput = "-i ${quote(recordedVideo.absolutePath)}"
+        val backingInput = if (offsetMs >= 0) {
+            "-ss ${formatSeconds(offsetMs / 1000.0)} -t $durationSeconds -i ${quote(backingAudio.absolutePath)}"
+        } else {
+            "-i ${quote(backingAudio.absolutePath)}"
+        }
+        val delayedBackingFilter = if (offsetMs < 0) {
+            val delayMs = -offsetMs
+            "[1:a]adelay=$delayMs:all=1,volume=$BACKING_VOLUME[backing]"
+        } else {
+            "[1:a]volume=$BACKING_VOLUME[backing]"
+        }
+
+        return if (recordedVideoHasAudio) {
+            listOf(
+                "-y",
+                videoInput,
+                backingInput,
+                "-filter_complex",
+                quote("[0:a]volume=$MIC_VOLUME[mic];$delayedBackingFilter;[mic][backing]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[a]"),
+                "-map 0:v:0",
+                "-map ${quote("[a]")}",
+                "-c:v copy",
+                "-c:a aac",
+                "-shortest",
+                quote(outputFile.absolutePath)
+            ).joinToString(" ")
+        } else {
+            val audioMapping = if (offsetMs < 0) {
+                listOf(
+                    "-filter_complex",
+                    quote("$delayedBackingFilter;[backing]alimiter=limit=0.95[a]"),
+                    "-map 0:v:0",
+                    "-map ${quote("[a]")}"
+                )
+            } else {
+                listOf(
+                    "-filter_complex",
+                    quote("[1:a]volume=$BACKING_VOLUME,alimiter=limit=0.95[a]"),
+                    "-map 0:v:0",
+                    "-map ${quote("[a]")}"
+                )
+            }
+
+            (listOf("-y", videoInput, backingInput) + audioMapping + listOf(
+                "-c:v copy",
+                "-c:a aac",
+                "-shortest",
+                quote(outputFile.absolutePath)
+            )).joinToString(" ")
+        }
+    }
+
+    private fun hasAudioTrack(file: File): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+        } catch (_: Exception) {
+            true
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun formatSeconds(value: Double): String {
+        return String.format(Locale.US, "%.3f", value)
+    }
+
+    private fun quote(value: String): String {
+        return "\"${value.replace("\"", "\\\"")}\""
     }
 }

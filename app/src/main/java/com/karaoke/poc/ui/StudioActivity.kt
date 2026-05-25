@@ -36,11 +36,6 @@ class StudioActivity : AppCompatActivity() {
     private var fullLyricsText: String = ""
     private var lyricsJob: kotlinx.coroutines.Job? = null
 
-    private val requiredPermissions = arrayOf(
-        Manifest.permission.CAMERA,
-        Manifest.permission.RECORD_AUDIO
-    )
-
     private val permissionRequestCode = 1001
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +44,7 @@ class StudioActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         viewModel = ViewModelProvider(this)[StudioViewModel::class.java]
+        binding.btnRecord.isEnabled = false
 
         // Set up observers first
         setupObservers()
@@ -59,12 +55,12 @@ class StudioActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 initManagers()
                 
-                if (allPermissionsGranted()) {
+                if (cameraPermissionGranted()) {
                     onPermissionsReady()
                 } else {
                     ActivityCompat.requestPermissions(
                         this@StudioActivity,
-                        requiredPermissions,
+                        arrayOf(Manifest.permission.CAMERA),
                         permissionRequestCode
                     )
                 }
@@ -164,11 +160,13 @@ class StudioActivity : AppCompatActivity() {
 
         // Pre-prepare backing audio
         viewModel.prepareAudio(backingAudioFile.absolutePath)
+        binding.btnRecord.isEnabled = true
     }
 
     private fun startRecordingSession() {
-        if (!allPermissionsGranted()) {
-            ActivityCompat.requestPermissions(this, requiredPermissions, permissionRequestCode)
+        val enableMic = binding.switchMic.isChecked
+        if (!recordingPermissionsGranted(enableMic)) {
+            ActivityCompat.requestPermissions(this, permissionsForRecording(enableMic), permissionRequestCode)
             return
         }
 
@@ -179,7 +177,7 @@ class StudioActivity : AppCompatActivity() {
         SyncEngine.recordedVideoFile = recordedVideoFile
 
         // Sequential start: Start video recording first, and start audio playback inside onRecordingStarted
-        cameraRecorder.startRecording(recordedVideoFile, object : CameraRecorderListener {
+        cameraRecorder.startRecording(recordedVideoFile, enableMic, object : CameraRecorderListener {
             override fun onRecordingStarted(videoTimestampNs: Long) {
                 SyncEngine.videoRecordStartTimeNs = videoTimestampNs
                 android.util.Log.d("SYNC", "videoStartNs=$videoTimestampNs")
@@ -239,8 +237,23 @@ class StudioActivity : AppCompatActivity() {
         cameraRecorder.stopRecording()
     }
 
-    private fun allPermissionsGranted() = requiredPermissions.all {
-        ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
+    private fun cameraPermissionGranted(): Boolean {
+        return ContextCompat.checkSelfPermission(baseContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun audioPermissionGranted(): Boolean {
+        return ContextCompat.checkSelfPermission(baseContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun recordingPermissionsGranted(enableMic: Boolean): Boolean {
+        return cameraPermissionGranted() && (!enableMic || audioPermissionGranted())
+    }
+
+    private fun permissionsForRecording(enableMic: Boolean): Array<String> {
+        return buildList {
+            if (!cameraPermissionGranted()) add(Manifest.permission.CAMERA)
+            if (enableMic && !audioPermissionGranted()) add(Manifest.permission.RECORD_AUDIO)
+        }.toTypedArray()
     }
 
     override fun onRequestPermissionsResult(
@@ -250,10 +263,13 @@ class StudioActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionRequestCode) {
-            if (allPermissionsGranted()) {
+            if (cameraPermissionGranted()) {
                 onPermissionsReady()
+                if (permissions.contains(Manifest.permission.RECORD_AUDIO) && !audioPermissionGranted()) {
+                    Toast.makeText(this, "Microphone permission is needed only when Mic is on.", Toast.LENGTH_LONG).show()
+                }
             } else {
-                Toast.makeText(this, "Camera & Audio permissions are required to use Studio.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Camera permission is required to use Studio.", Toast.LENGTH_LONG).show()
             }
         }
     }

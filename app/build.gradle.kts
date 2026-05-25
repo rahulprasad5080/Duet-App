@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.karaoke.poc"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.karaoke.poc"
         minSdk = 26
@@ -52,5 +52,5 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3Version")
 
     // FFmpegKit
-    implementation("io.github.xch168:ffmpeg-kit-full-gpl:1.0.2")
+    implementation("com.moizhassan.ffmpeg.ffmpegkit:ffmpegkit:6.1.1")
 }

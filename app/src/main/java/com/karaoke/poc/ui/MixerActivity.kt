@@ -1,6 +1,7 @@
 package com.karaoke.poc.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.ProgressBar
 import android.widget.Toast
@@ -125,7 +126,7 @@ class MixerActivity : AppCompatActivity() {
         releasePlayer()
 
         exoPlayer = ExoPlayer.Builder(this).build().apply {
-            val mediaItem = MediaItem.fromUri(videoPath)
+            val mediaItem = MediaItem.fromUri(Uri.fromFile(java.io.File(videoPath)))
             setMediaItem(mediaItem)
             repeatMode = Player.REPEAT_MODE_ALL
             prepare()
