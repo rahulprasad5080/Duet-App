@@ -31,6 +31,7 @@ class StudioActivity : AppCompatActivity() {
     private lateinit var cameraRecorder: CameraRecorder
     private lateinit var backingAudioFile: File
     private lateinit var recordedVideoFile: File
+    private lateinit var audioRoutingManager: com.karaoke.poc.audio.AudioRoutingManager
 
     private val spanInfos = mutableListOf<LyricSpanInfo>()
     private var fullLyricsText: String = ""
@@ -55,12 +56,20 @@ class StudioActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 initManagers()
                 
-                if (cameraPermissionGranted()) {
+                val permissionsToRequest = mutableListOf<String>()
+                if (!cameraPermissionGranted()) {
+                    permissionsToRequest.add(Manifest.permission.CAMERA)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && !bluetoothPermissionGranted()) {
+                    permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+
+                if (permissionsToRequest.isEmpty()) {
                     onPermissionsReady()
                 } else {
                     ActivityCompat.requestPermissions(
                         this@StudioActivity,
-                        arrayOf(Manifest.permission.CAMERA),
+                        permissionsToRequest.toTypedArray(),
                         permissionRequestCode
                     )
                 }
@@ -143,9 +152,13 @@ class StudioActivity : AppCompatActivity() {
     private fun initManagers() {
         cameraRecorder = CameraRecorder(this)
         viewModel.initAudioPlaybackManager(this)
+        audioRoutingManager = com.karaoke.poc.audio.AudioRoutingManager(this)
     }
 
     private fun onPermissionsReady() {
+        // Start Bluetooth SCO routing for earbud microphone
+        audioRoutingManager.startBluetoothRouting()
+
         // Start front camera preview
         cameraRecorder.setUpCamera(this, binding.previewView)
 
@@ -245,14 +258,26 @@ class StudioActivity : AppCompatActivity() {
         return ContextCompat.checkSelfPermission(baseContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun bluetoothPermissionGranted(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(baseContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
     private fun recordingPermissionsGranted(enableMic: Boolean): Boolean {
-        return cameraPermissionGranted() && (!enableMic || audioPermissionGranted())
+        val bluetoothOk = bluetoothPermissionGranted()
+        return cameraPermissionGranted() && (!enableMic || audioPermissionGranted()) && bluetoothOk
     }
 
     private fun permissionsForRecording(enableMic: Boolean): Array<String> {
         return buildList {
             if (!cameraPermissionGranted()) add(Manifest.permission.CAMERA)
             if (enableMic && !audioPermissionGranted()) add(Manifest.permission.RECORD_AUDIO)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && !bluetoothPermissionGranted()) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
         }.toTypedArray()
     }
 
@@ -337,6 +362,7 @@ class StudioActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        audioRoutingManager.stopBluetoothRouting()
         stopLyricsScrolling()
         // Stop session if app goes to background
         if (viewModel.recordingState.value == RecordingState.RECORDING) {
@@ -346,6 +372,7 @@ class StudioActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        audioRoutingManager.stopBluetoothRouting()
         stopLyricsScrolling()
         viewModel.releaseManagers()
     }
