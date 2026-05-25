@@ -23,36 +23,38 @@ class AudioRoutingManager(private val context: Context) {
 
     fun startBluetoothRouting() {
         Log.d("ROUTING", "startBluetoothRouting: called")
-        if (!isBluetoothHeadsetConnected()) {
-            Log.d("ROUTING", "startBluetoothRouting: No Bluetooth headset connected. Leaving audio routing default.")
-            return
-        }
-
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Android 12+ API: set communication device
-                val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                val bluetoothDevice = devices.firstOrNull {
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                }
-                if (bluetoothDevice != null) {
-                    val result = audioManager.setCommunicationDevice(bluetoothDevice)
-                    Log.d("ROUTING", "startBluetoothRouting: setCommunicationDevice result=$result, deviceType=${bluetoothDevice.type}")
-                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            if (isBluetoothHeadsetConnected()) {
+                Log.d("ROUTING", "startBluetoothRouting: Bluetooth headset detected. Routing communication to Bluetooth.")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    // Android 12+ API: set communication device
+                    val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    val bluetoothDevice = devices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                    }
+                    if (bluetoothDevice != null) {
+                        val result = audioManager.setCommunicationDevice(bluetoothDevice)
+                        Log.d("ROUTING", "startBluetoothRouting: setCommunicationDevice result=$result, deviceType=${bluetoothDevice.type}")
+                        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    } else {
+                        Log.d("ROUTING", "startBluetoothRouting: No connected Bluetooth output device found for communication")
+                    }
                 } else {
-                    Log.d("ROUTING", "startBluetoothRouting: No connected Bluetooth output device found for communication")
+                    // Legacy Android API: start SCO
+                    if (audioManager.isBluetoothScoAvailableOffCall) {
+                        Log.d("ROUTING", "startBluetoothRouting: Starting legacy Bluetooth SCO")
+                        audioManager.startBluetoothSco()
+                        audioManager.isBluetoothScoOn = true
+                        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    } else {
+                        Log.w("ROUTING", "startBluetoothRouting: Bluetooth SCO is NOT available off call")
+                    }
                 }
             } else {
-                // Legacy Android API: start SCO
-                if (audioManager.isBluetoothScoAvailableOffCall) {
-                    Log.d("ROUTING", "startBluetoothRouting: Starting legacy Bluetooth SCO")
-                    audioManager.startBluetoothSco()
-                    audioManager.isBluetoothScoOn = true
-                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                } else {
-                    Log.w("ROUTING", "startBluetoothRouting: Bluetooth SCO is NOT available off call")
-                }
+                Log.d("ROUTING", "startBluetoothRouting: No Bluetooth headset connected. Enabling speakerphone in communication mode for Echo Cancellation.")
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager.isSpeakerphoneOn = true
             }
         } catch (e: Exception) {
             Log.e("ROUTING", "startBluetoothRouting: Exception", e)
@@ -62,6 +64,7 @@ class AudioRoutingManager(private val context: Context) {
     fun stopBluetoothRouting() {
         Log.d("ROUTING", "stopBluetoothRouting: called")
         try {
+            audioManager.isSpeakerphoneOn = false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 audioManager.clearCommunicationDevice()
                 audioManager.mode = AudioManager.MODE_NORMAL
