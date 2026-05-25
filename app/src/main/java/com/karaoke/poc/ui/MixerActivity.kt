@@ -43,6 +43,35 @@ class MixerActivity : AppCompatActivity() {
         // Display sync offset details
         binding.tvSyncOffset.text = "Video offset from audio: $offsetMs ms\nDuration: $durationMs ms"
 
+        // Setup SeekBars default labels
+        binding.tvVoiceVolumeLabel.text = "Voice Volume: ${binding.sbVoiceVolume.progress}%"
+        binding.tvMusicVolumeLabel.text = "Music Volume: ${binding.sbMusicVolume.progress}%"
+
+        // Seekbar listeners
+        binding.sbVoiceVolume.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                binding.tvVoiceVolumeLabel.text = "Voice Volume: ${progress}%"
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        binding.sbMusicVolume.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                binding.tvMusicVolumeLabel.text = "Music Volume: ${progress}%"
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        // Remix button listener
+        binding.btnRemix.setOnClickListener {
+            val micVol = binding.sbVoiceVolume.progress / 100.0
+            val musicVol = binding.sbMusicVolume.progress / 100.0
+            releasePlayer()
+            viewModel.startMerge(this, videoPath, audioPath, offsetMs, durationMs, micVol, musicVol)
+        }
+
         // Setup LiveData observers
         setupObservers()
 

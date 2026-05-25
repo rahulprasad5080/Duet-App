@@ -31,7 +31,9 @@ class MixerViewModel : ViewModel() {
         recordedVideoPath: String,
         backingAudioPath: String,
         offsetMs: Long,
-        durationMs: Long
+        durationMs: Long,
+        micVolume: Double = VideoMerger.DEFAULT_MIC_VOLUME,
+        backingVolume: Double = VideoMerger.DEFAULT_BACKING_VOLUME
     ) {
         val recordedVideo = File(recordedVideoPath)
         val backingAudio = File(backingAudioPath)
@@ -54,6 +56,8 @@ class MixerViewModel : ViewModel() {
             backingAudio,
             offsetMs,
             durationMs,
+            micVolume,
+            backingVolume,
             object : MergeListener {
                 override fun onMergeStarted() {
                     _mergeState.postValue(MergeState.MERGING)

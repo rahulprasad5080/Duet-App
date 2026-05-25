@@ -15,9 +15,9 @@ interface MergeListener {
 
 class VideoMerger(val context: Context) {
 
-    private companion object {
-        const val MIC_VOLUME = 2.0
-        const val BACKING_VOLUME = 0.3
+    companion object {
+        const val DEFAULT_MIC_VOLUME = 2.0
+        const val DEFAULT_BACKING_VOLUME = 0.3
     }
 
     fun merge(
@@ -25,6 +25,8 @@ class VideoMerger(val context: Context) {
         backingAudio: File,
         offsetMs: Long,
         durationMs: Long,
+        micVolume: Double,
+        backingVolume: Double,
         listener: MergeListener
     ) {
         val outputFile = OutputComposer().getMergedOutputFile(context)
@@ -40,7 +42,9 @@ class VideoMerger(val context: Context) {
             outputFile = outputFile,
             offsetMs = offsetMs,
             durationMs = durationMs,
-            recordedVideoHasAudio = hasAudioTrack(recordedVideo)
+            recordedVideoHasAudio = hasAudioTrack(recordedVideo),
+            micVolume = micVolume,
+            backingVolume = backingVolume
         )
 
         listener.onMergeStarted()
@@ -63,7 +67,9 @@ class VideoMerger(val context: Context) {
         outputFile: File,
         offsetMs: Long,
         durationMs: Long,
-        recordedVideoHasAudio: Boolean
+        recordedVideoHasAudio: Boolean,
+        micVolume: Double,
+        backingVolume: Double
     ): String {
         val durationSeconds = formatSeconds(durationMs.coerceAtLeast(1L) / 1000.0)
         val videoInput = "-i ${quote(recordedVideo.absolutePath)}"
@@ -74,9 +80,9 @@ class VideoMerger(val context: Context) {
         }
         val delayedBackingFilter = if (offsetMs < 0) {
             val delayMs = -offsetMs
-            "[1:a]adelay=$delayMs:all=1,volume=$BACKING_VOLUME[backing]"
+            "[1:a]adelay=$delayMs:all=1,volume=$backingVolume[backing]"
         } else {
-            "[1:a]volume=$BACKING_VOLUME[backing]"
+            "[1:a]volume=$backingVolume[backing]"
         }
 
         return if (recordedVideoHasAudio) {
@@ -85,7 +91,7 @@ class VideoMerger(val context: Context) {
                 videoInput,
                 backingInput,
                 "-filter_complex",
-                quote("[0:a]volume=$MIC_VOLUME[mic];$delayedBackingFilter;[mic][backing]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[a]"),
+                quote("[0:a]volume=$micVolume[mic];$delayedBackingFilter;[mic][backing]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[a]"),
                 "-map 0:v:0",
                 "-map ${quote("[a]")}",
                 "-c:v copy",
@@ -104,7 +110,7 @@ class VideoMerger(val context: Context) {
             } else {
                 listOf(
                     "-filter_complex",
-                    quote("[1:a]volume=$BACKING_VOLUME,alimiter=limit=0.95[a]"),
+                    quote("[1:a]volume=$backingVolume,alimiter=limit=0.95[a]"),
                     "-map 0:v:0",
                     "-map ${quote("[a]")}"
                 )
